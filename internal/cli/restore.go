@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/YOUR_USERNAME/workshot/internal/snapshot"
+	"github.com/ansoncodes/workshot/internal/snapshot"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )

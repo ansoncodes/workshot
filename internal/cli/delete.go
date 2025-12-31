@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/YOUR_USERNAME/workshot/internal/storage"
+	"github.com/ansoncodes/workshot/internal/storage"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
