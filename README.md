@@ -217,16 +217,17 @@ Invoke-Expression (workshot restore api-work -c | Out-String)
 
 ## All Commands
 
-| Command                      | Description                                   |
-| ---------------------------- | --------------------------------------------- |
-| `workshot freeze <name>`     | Save current development context              |
-| `workshot restore <name>`    | Display snapshot details and restore commands |
-| `workshot restore <name> -c` | Output shell commands only (for `eval`)       |
-| `workshot list`              | List all saved snapshots                      |
-| `workshot show <name>`       | Display snapshot details (human-readable)     |
-| `workshot show <name> -j`    | Output snapshot as raw JSON                   |
-| `workshot delete <name>`     | Remove a snapshot                             |
-| `workshot --version`         | Show version information                      |
+| Command                      | Description                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `workshot freeze <name>`     | Capture the current **working directory, git context, and recent terminal commands** into a snapshot |
+| `workshot restore <name>`    | Show the saved snapshot details and **print the steps required to restore the context**              |
+| `workshot restore <name> -c` | **Emit shell commands** that restore the **working directory and git branch** (for `eval` / `iex`)   |
+| `workshot list`              | List all saved workshot snapshots                                                                    |
+| `workshot show <name>`       | Display detailed information about a snapshot (directory, git info, commands)                        |
+| `workshot show <name> -j`    | Output the snapshot data as **raw JSON**                                                             |
+| `workshot delete <name>`     | Permanently delete a saved snapshot                                                                  |
+| `workshot --version`         | Display the installed Workshot version                                                               |
+
 
 ---
 
