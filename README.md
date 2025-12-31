@@ -226,7 +226,7 @@ Invoke-Expression (workshot restore api-work -c | Out-String)
 | `workshot show <name>`       | Display snapshot details (human-readable)     |
 | `workshot show <name> -j`    | Output snapshot as raw JSON                   |
 | `workshot delete <name>`     | Remove a snapshot                             |
-| `workshot version`           | Show version information                      |
+| `workshot --version`         | Show version information                      |
 
 ---
 
