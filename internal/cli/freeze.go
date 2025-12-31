@@ -36,7 +36,7 @@ The snapshot is saved to ~/.workshot/shots/ as human-readable JSON.`,
 		green := color.New(color.FgGreen).SprintFunc()
 		cyan := color.New(color.FgCyan).SprintFunc()
 
-		fmt.Printf("%s Freezing workshot '%s'...\n", yellow("📸"), cyan(name))
+		fmt.Printf("%s Freezing workshot '%s'...\n", yellow(""), cyan(name))
 
 		// setup plugin manager
 		manager := initPluginManager()
