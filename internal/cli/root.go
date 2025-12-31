@@ -19,7 +19,7 @@ examples
   workshot restore my-work       restore saved context
   workshot list                  list all saved contexts
   workshot show my-work          view context details`,
-	Version: version.Version,
+	Version: version.Get(),
 }
 
 // run the root command
