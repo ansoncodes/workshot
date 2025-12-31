@@ -2,16 +2,9 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-)
 
-var (
-	appVersion = "dev"
+	"github.com/ansoncodes/workshot/internal/version"
 )
-
-// set the app version from main
-func SetVersion(v string) {
-	appVersion = v
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "workshot",
@@ -26,7 +19,7 @@ examples
   workshot restore my-work       restore saved context
   workshot list                  list all saved contexts
   workshot show my-work          view context details`,
-	Version: appVersion,
+	Version: version.Version,
 }
 
 // run the root command
