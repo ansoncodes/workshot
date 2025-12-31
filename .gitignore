@@ -1,0 +1,41 @@
+# go build outputs
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# go test binaries
+*.test
+
+# go coverage
+*.out
+
+# dependency directories
+/vendor/
+
+# editor and ide files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# os generated files
+.DS_Store
+Thumbs.db
+
+# environment and secrets
+.env
+.env.local
+
+# workshot local data
+.workshot/
+
+# logs
+*.log
+
+# temporary files
+tmp/
+temp/
