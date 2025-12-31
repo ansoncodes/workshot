@@ -11,36 +11,62 @@ import (
 
 func init() {
 	rootCmd.AddCommand(restoreCmd)
+	// Add a flag to output only shell commands for eval
+	restoreCmd.Flags().BoolP("commands", "c", false, "Output only shell commands for eval")
 }
 
 var restoreCmd = &cobra.Command{
 	Use:   "restore [name]",
 	Short: "Restore a saved development context",
-	Long: `Restore brings back your saved working state including:
-  • Working directory (cd to it)
-  • Git branch (checkout)
-  • Open files (in your editor)
-  • Display recent commands for reference`,
+	Long: `Restore displays your saved working state and prints the commands to restore it.
+
+Restore WILL:
+• Display saved working directory
+• Show Git state and recent commands
+• Emit shell commands to change directory
+
+Restore WON'T (due to shell limitations):
+• Change your current shell's directory
+• Run commands automatically
+• Restore running processes
+
+Examples:
+  workshot restore my-task            # Show context and commands
+  eval $(workshot restore my-task -c) # Execute restore commands
+  cd $(workshot restore my-task -c)   # Just change directory`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
+		
+		// Check if we're in command-only mode
+		commandsOnly, _ := cmd.Flags().GetBool("commands")
+		
+		// Setup plugin manager
+		manager := initPluginManager()
 
+		// Load snapshot
+		snap, errors := snapshot.Restore(name, manager)
+		if snap == nil {
+			return fmt.Errorf("failed to load snapshot '%s'", name)
+		}
+
+		// COMMAND-ONLY MODE: Just output shell commands for eval
+		if commandsOnly {
+			fmt.Printf("cd %q\n", snap.WorkingDir)
+			if snap.GitBranch != "" {
+				fmt.Printf("git checkout %s\n", snap.GitBranch)
+			}
+			return nil
+		}
+
+		// HUMAN-READABLE MODE: Show info and commands
 		cyan := color.New(color.FgCyan).SprintFunc()
 		green := color.New(color.FgGreen).SprintFunc()
 		yellow := color.New(color.FgYellow).SprintFunc()
 
 		fmt.Printf("↻ Restoring workshot '%s'...\n\n", cyan(name))
 
-		// setup plugin manager
-		manager := initPluginManager()
-
-		// restore snapshot
-		snap, errors := snapshot.Restore(name, manager)
-		if snap == nil {
-			return fmt.Errorf("failed to load snapshot")
-		}
-
-		// show restored data
+		// Show restored data
 		fmt.Printf("✓ Working directory: %s\n", snap.WorkingDir)
 
 		if snap.GitBranch != "" {
@@ -51,7 +77,7 @@ var restoreCmd = &cobra.Command{
 			fmt.Println()
 		}
 
-		// show warnings
+		// Show warnings
 		if len(errors) > 0 {
 			fmt.Println()
 			for _, err := range errors {
@@ -59,11 +85,11 @@ var restoreCmd = &cobra.Command{
 			}
 		}
 
-		// show snapshot age
+		// Show snapshot age
 		age := time.Since(snap.CreatedAt)
 		fmt.Printf("\n⏱ Saved: %s\n", formatAge(age))
 
-		// show recent commands if present
+		// Show recent commands if present
 		if termData, ok := snap.PluginData["terminal"].(map[string]interface{}); ok {
 			if commandsInterface, ok := termData["recent_commands"]; ok {
 				if commandsList, ok := commandsInterface.([]interface{}); ok {
@@ -82,10 +108,23 @@ var restoreCmd = &cobra.Command{
 			}
 		}
 
+		// CRITICAL: Show shell commands to actually restore context
+		fmt.Println("\n---")
+		fmt.Println("Commands to restore context:")
+		fmt.Printf("    cd %q\n", snap.WorkingDir)
+		if snap.GitBranch != "" {
+			fmt.Printf("    git checkout %s\n", snap.GitBranch)
+		}
+		
+		fmt.Println("\nQuick restore options:")
+		fmt.Printf("  PowerShell:     cd %q\n", snap.WorkingDir)
+		fmt.Printf("  Bash/Zsh:       cd %s\n", snap.WorkingDir)
+		fmt.Printf("  Using eval:     eval $(workshot restore %s -c)\n", name)
+		
 		if len(errors) == 0 {
-			fmt.Printf("\n%s Context restored\n", green("✓"))
+			fmt.Printf("\n%s Context information restored\n", green("✓"))
 		} else {
-			fmt.Printf("\n%s Context partially restored see warnings above\n", yellow("⚠"))
+			fmt.Printf("\n%s Context partially restored (see warnings above)\n", yellow("⚠"))
 		}
 
 		return nil
