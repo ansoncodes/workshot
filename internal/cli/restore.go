@@ -11,7 +11,6 @@ import (
 
 func init() {
 	rootCmd.AddCommand(restoreCmd)
-	// Add a flag to output only shell commands for eval
 	restoreCmd.Flags().BoolP("commands", "c", false, "Output only shell commands for eval")
 }
 
@@ -37,20 +36,17 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		
-		// Check if we're in command-only mode
+
 		commandsOnly, _ := cmd.Flags().GetBool("commands")
-		
-		// Setup plugin manager
+
 		manager := initPluginManager()
 
-		// Load snapshot
 		snap, errors := snapshot.Restore(name, manager)
 		if snap == nil {
 			return fmt.Errorf("failed to load snapshot '%s'", name)
 		}
 
-		// COMMAND-ONLY MODE: Just output shell commands for eval
+		// COMMAND-ONLY MODE
 		if commandsOnly {
 			fmt.Printf("cd %q\n", snap.WorkingDir)
 			if snap.GitBranch != "" {
@@ -59,72 +55,87 @@ Examples:
 			return nil
 		}
 
-		// HUMAN-READABLE MODE: Show info and commands
+		// Formatters (match `show`)
+		bold := color.New(color.Bold).SprintFunc()
 		cyan := color.New(color.FgCyan).SprintFunc()
-		green := color.New(color.FgGreen).SprintFunc()
+		boldCyan := color.New(color.Bold, color.FgCyan).SprintFunc()
+		gray := color.New(color.FgHiBlack).SprintFunc()
 		yellow := color.New(color.FgYellow).SprintFunc()
 
-		fmt.Printf("↻ Restoring workshot '%s'...\n\n", cyan(name))
+		// Header
+		fmt.Printf(" %s %s\n", bold("Snapshot:"), boldCyan(name))
+		fmt.Printf("   %s %s\n", bold("Created:"), gray(snap.CreatedAt.Format("2006-01-02 15:04:05")))
+		fmt.Println()
 
-		// Show restored data
-		fmt.Printf("✓ Working directory: %s\n", snap.WorkingDir)
+		// Working Directory
+		fmt.Printf(" %s\n", bold("Working Directory:"))
+		fmt.Printf("   %s\n", snap.WorkingDir)
+		fmt.Println()
 
-		if snap.GitBranch != "" {
-			fmt.Printf("%s Git branch: %s", green("✓"), snap.GitBranch)
-			if snap.GitDirty {
-				fmt.Printf(" %s", yellow("(uncommitted changes)"))
+		// Git State
+		if snap.GitBranch != "" || snap.GitRemote != "" {
+			fmt.Printf(" %s\n", bold("Git State:"))
+
+			if snap.GitBranch != "" {
+				fmt.Printf("   %s  %s\n", bold("Branch:"), cyan(snap.GitBranch))
 			}
+
+			if snap.GitRemote != "" {
+				fmt.Printf("   %s  %s\n", bold("Remote:"), gray(snap.GitRemote))
+			}
+
+			if snap.GitDirty {
+				fmt.Printf("   %s  %s\n", bold("Status:"), yellow("Modified (uncommitted changes)"))
+			} else {
+				fmt.Printf("   %s  Clean\n", bold("Status:"))
+			}
+
+			if gitData, ok := snap.PluginData["git"].(map[string]interface{}); ok {
+				if commit, ok := gitData["commit"].(string); ok && commit != "" {
+					fmt.Printf("   %s  %s\n", bold("Commit:"), gray(commit))
+				}
+
+				if stashCount, ok := gitData["stash_count"].(float64); ok && stashCount > 0 {
+					fmt.Printf("   %s  %.0f\n", bold("Stashes:"), stashCount)
+				}
+			}
+
 			fmt.Println()
 		}
 
-		// Show warnings
+		// Recent Commands
+		if termData, ok := snap.PluginData["terminal"].(map[string]interface{}); ok {
+			if commandsList, ok := termData["recent_commands"].([]interface{}); ok && len(commandsList) > 0 {
+				fmt.Printf(" %s\n", bold("Recent Commands:"))
+
+				displayCount := len(commandsList)
+				if displayCount > 10 {
+					displayCount = 10
+				}
+				start := len(commandsList) - displayCount
+
+				for i := start; i < len(commandsList); i++ {
+					if cmd, ok := commandsList[i].(string); ok {
+						fmt.Printf("   %s\n", cmd)
+					}
+				}
+				fmt.Println()
+			}
+		}
+
+		// Commands to restore
+		fmt.Printf(" %s\n", bold("Commands to restore:"))
+		fmt.Printf("   cd %q\n", snap.WorkingDir)
+		if snap.GitBranch != "" {
+			fmt.Printf("   git checkout %s\n", snap.GitBranch)
+		}
+
+		// Warnings
 		if len(errors) > 0 {
 			fmt.Println()
 			for _, err := range errors {
-				fmt.Printf("⚠ Warning: %v\n", err)
+				fmt.Printf("⚠ %s %v\n", bold("Warning:"), err)
 			}
-		}
-
-		// Show snapshot age
-		age := time.Since(snap.CreatedAt)
-		fmt.Printf("\n⏱ Saved: %s\n", formatAge(age))
-
-		// Show recent commands if present
-		if termData, ok := snap.PluginData["terminal"].(map[string]interface{}); ok {
-			if commandsInterface, ok := termData["recent_commands"]; ok {
-				if commandsList, ok := commandsInterface.([]interface{}); ok {
-					fmt.Println("\nRecent commands from this context:")
-					displayCount := len(commandsList)
-					if displayCount > 10 {
-						displayCount = 10
-					}
-					start := len(commandsList) - displayCount
-					for i := start; i < len(commandsList); i++ {
-						if cmd, ok := commandsList[i].(string); ok {
-							fmt.Printf("   %s\n", cmd)
-						}
-					}
-				}
-			}
-		}
-
-		// CRITICAL: Show shell commands to actually restore context
-		fmt.Println("\n---")
-		fmt.Println("Commands to restore context:")
-		fmt.Printf("    cd %q\n", snap.WorkingDir)
-		if snap.GitBranch != "" {
-			fmt.Printf("    git checkout %s\n", snap.GitBranch)
-		}
-		
-		fmt.Println("\nQuick restore options:")
-		fmt.Printf("  PowerShell:     cd %q\n", snap.WorkingDir)
-		fmt.Printf("  Bash/Zsh:       cd %s\n", snap.WorkingDir)
-		fmt.Printf("  Using eval:     eval $(workshot restore %s -c)\n", name)
-		
-		if len(errors) == 0 {
-			fmt.Printf("\n%s Context information restored\n", green("✓"))
-		} else {
-			fmt.Printf("\n%s Context partially restored (see warnings above)\n", yellow("⚠"))
 		}
 
 		return nil
@@ -132,22 +143,20 @@ Examples:
 }
 
 func formatAge(d time.Duration) string {
-	// format time since snapshot was created
-	if d.Minutes() < 1 {
+	if d < time.Minute {
 		return "just now"
-	} else if d.Hours() < 1 {
+	} else if d < time.Hour {
 		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
-	} else if d.Hours() < 24 {
+	} else if d < 24*time.Hour {
 		hours := int(d.Hours())
 		if hours == 1 {
 			return "1 hour ago"
 		}
 		return fmt.Sprintf("%d hours ago", hours)
-	} else {
-		days := int(d.Hours() / 24)
-		if days == 1 {
-			return "1 day ago"
-		}
-		return fmt.Sprintf("%d days ago", days)
 	}
+	days := int(d.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%d days ago", days)
 }
