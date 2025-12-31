@@ -1,279 +1,147 @@
-# Workshot Integration Test Script for Windows
-# Run with: .\test_integration.ps1
+package capture
 
-$ErrorActionPreference = "Stop"
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strings"
 
-# Colors for output
-$ErrorActionPreference = "Stop"
+	"github.com/ansoncodes/workshot/pkg/types"
+)
 
-# Output helpers (ASCII ONLY)
-function Write-Success { Write-Host "[OK] $args" -ForegroundColor Green }
-function Write-Error   { Write-Host "[ERR] $args" -ForegroundColor Red }
-function Write-Info    { Write-Host "[INFO] $args" -ForegroundColor Cyan }
-function Write-Test    { Write-Host "[TEST] $args" -ForegroundColor Yellow }
-
-$TestsPassed = 0
-$TestsFailed = 0
-
-Write-Host ""
-Write-Info "Running Workshot Integration Tests..."
-Write-Host ""
-
-
-$TestsPassed = 0
-$TestsFailed = 0
-
-Write-Host ""
-Write-Info "Running Workshot Integration Tests..."
-Write-Host ""
-
-# Test 1: Build the binary
-Write-Test "Building workshot..."
-try {
-    go build -o "$env:TEMP\workshot.exe" .\cmd\workshot\main.go
-    if (Test-Path "$env:TEMP\workshot.exe") {
-        Write-Success "Build successful"
-        $TestsPassed++
-    } else {
-        Write-Error "Build failed - binary not found"
-        $TestsFailed++
-        exit 1
-    }
-} catch {
-    Write-Error "Build failed: $_"
-    $TestsFailed++
-    exit 1
+type TerminalCapturer struct {
+	maxCommands int
 }
 
-# Add to PATH for this session
-$env:PATH = "$env:TEMP;$env:PATH"
-
-Write-Host ""
-
-# Test 2: Version flag
-Write-Test "Version flag"
-try {
-    $version = & workshot --version 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Version: $version"
-        $TestsPassed++
-    } else {
-        Write-Error "Version flag failed"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Version flag failed: $_"
-    $TestsFailed++
+func NewTerminalCapturer() types.Capturer {
+	return &TerminalCapturer{
+		maxCommands: 20,
+	}
 }
 
-# Test 3: Help command
-Write-Test "Help command"
-try {
-    $help = & workshot --help 2>&1
-    if ($LASTEXITCODE -eq 0 -and $help -match "workshot") {
-        Write-Success "Help displayed correctly"
-        $TestsPassed++
-    } else {
-        Write-Error "Help command failed"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Help command failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) Name() string {
+	return "terminal"
 }
 
-# Test 4: Freeze in temp directory
-Write-Test "Freeze in temp directory"
-Push-Location $env:TEMP
-try {
-    $output = & workshot freeze test-context-1 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Freeze successful in $env:TEMP"
-        $TestsPassed++
-    } else {
-        Write-Error "Freeze failed: $output"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Freeze failed: $_"
-    $TestsFailed++
-}
-Pop-Location
-
-# Test 5: List shows snapshot
-Write-Test "List shows snapshot"
-try {
-    $list = & workshot list 2>&1 | Out-String
-    if ($list -match "test-context-1") {
-        Write-Success "Snapshot appears in list"
-        $TestsPassed++
-    } else {
-        Write-Error "Snapshot not found in list"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "List command failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) Priority() int {
+	return 30
 }
 
-# Test 6: Show snapshot details
-Write-Test "Show snapshot details"
-try {
-    $show = & workshot show test-context-1 2>&1 | Out-String
-    if ($show -match "test-context-1" -and $show -match "working_dir") {
-        Write-Success "Show displays snapshot details"
-        $TestsPassed++
-    } else {
-        Write-Error "Show command output incorrect"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Show command failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) Capture() (map[string]interface{}, error) {
+	commands := t.getRecentCommands()
+	if len(commands) == 0 {
+		return nil, nil
+	}
+
+	data := make(map[string]interface{})
+	data["recent_commands"] = commands
+
+	return data, nil
 }
 
-# Test 7: Freeze another snapshot in different directory
-Write-Test "Freeze in home directory"
-Push-Location $env:USERPROFILE
-try {
-    $output = & workshot freeze test-context-2 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Freeze successful in home directory"
-        $TestsPassed++
-    } else {
-        Write-Error "Freeze failed: $output"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Freeze failed: $_"
-    $TestsFailed++
-}
-Pop-Location
-
-# Test 8: List shows 2 snapshots
-Write-Test "List shows 2 snapshots"
-try {
-    $list = & workshot list 2>&1 | Out-String
-    # Count occurrences of snapshot names instead of emoji
-    $matches = ([regex]::Matches($list, "test-context-")).Count
-    if ($matches -ge 2) {
-        Write-Success "List shows 2 snapshots"
-        $TestsPassed++
-    } else {
-        Write-Error "Expected 2 snapshots, found $matches"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "List count failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) Restore(data map[string]interface{}) error {
+	return nil
 }
 
-# Test 9: Restore first context
-Write-Test "Restore first context"
-try {
-    $output = & workshot restore test-context-1 2>&1 | Out-String
-    if ($output -match "Working directory:.*$([regex]::Escape($env:TEMP))") {
-        Write-Success "Restore output shows correct directory"
-        $TestsPassed++
-    } else {
-        Write-Error "Restore output doesn't show temp directory: $output"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Restore failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) CanRestore(data map[string]interface{}) bool {
+	return false
 }
 
-# Remove Test 10 entirely or change it:
-Write-Test "Verify restore output contains directory info"
-try {
-    $output = & workshot restore test-context-1 2>&1 | Out-String
-    if ($output -match "Working directory:") {
-        Write-Success "Restore command outputs directory info"
-        $TestsPassed++
-    } else {
-        Write-Error "Restore output missing directory info"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Directory info check failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) getRecentCommands() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return []string{}
+	}
+
+	var historyFiles []string
+
+	if runtime.GOOS == "windows" {
+		appData := os.Getenv("APPDATA")
+		
+		// PowerShell history FIRST
+		historyFiles = []string{
+			filepath.Join(appData, "Microsoft", "Windows", "PowerShell", "PSReadLine", "ConsoleHost_history.txt"),
+			filepath.Join(home, ".bash_history"),
+			filepath.Join(home, ".history"),
+		}
+	} else {
+		historyFiles = []string{
+			filepath.Join(home, ".zsh_history"),
+			filepath.Join(home, ".bash_history"),
+			filepath.Join(home, ".history"),
+		}
+	}
+
+	for _, histFile := range historyFiles {
+		if commands := t.readHistoryFile(histFile); len(commands) > 0 {
+			return commands
+		}
+	}
+
+	return []string{}
 }
 
-# Test 11: Delete with force flag
-Write-Test "Delete snapshot (force)"
-try {
-    $output = & workshot delete test-context-1 -f 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Delete successful"
-        $TestsPassed++
-    } else {
-        Write-Error "Delete failed: $output"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "Delete failed: $_"
-    $TestsFailed++
+func (t *TerminalCapturer) readHistoryFile(path string) []string {
+	file, err := os.Open(path)
+	if err != nil {
+		return []string{}
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := t.cleanHistoryLine(scanner.Text())
+		if line != "" && !t.isSensitive(line) {
+			lines = append(lines, line)
+		}
+	}
+
+	// Return last N lines
+	if len(lines) > t.maxCommands {
+		lines = lines[len(lines)-t.maxCommands:]
+	}
+
+	return lines
 }
 
-# Test 12: Verify snapshot deleted
-Write-Test "Snapshot deleted"
-try {
-    $show = & workshot show test-context-1 2>&1 | Out-String
-    if ($show -match "not found") {
-        Write-Success "Snapshot successfully deleted"
-        $TestsPassed++
-    } else {
-        Write-Error "Snapshot still exists"
-        $TestsFailed++
-    }
-} catch {
-    # Error expected - snapshot should not exist
-    Write-Success "Snapshot successfully deleted"
-    $TestsPassed++
+func (t *TerminalCapturer) cleanHistoryLine(line string) string {
+	// Zsh history format: ": timestamp:0;command"
+	if strings.HasPrefix(line, ":") {
+		parts := strings.SplitN(line, ";", 2)
+		if len(parts) == 2 {
+			line = parts[1]
+		}
+	}
+
+	// Remove PowerShell line continuation backticks
+	line = strings.TrimSuffix(line, "`")
+
+	return strings.TrimSpace(line)
 }
 
-# Test 13: List shows 1 snapshot after delete
-Write-Test "List shows 1 snapshot after delete"
-try {
-    $list = & workshot list 2>&1 | Out-String
-    $matches = ([regex]::Matches($list, "test-context-")).Count
-    if ($matches -eq 1) {
-        Write-Success "List shows 1 snapshot"
-        $TestsPassed++
-    } else {
-        Write-Error "Expected 1 snapshot, found $matches"
-        $TestsFailed++
-    }
-} catch {
-    Write-Error "List count failed: $_"
-    $TestsFailed++
-}
+func (t *TerminalCapturer) isSensitive(line string) bool {
+	sensitivePatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(password|passwd|pwd)\s*=`),
+		regexp.MustCompile(`(?i)(secret|token|key|api[-_]?key)\s*=`),
+		regexp.MustCompile(`(?i)export\s+(AWS|GITHUB|GITLAB|API|AUTH)_`),
+		regexp.MustCompile(`(?i)\$env:[A-Z_]*?(PASSWORD|SECRET|TOKEN|KEY)`),
+		regexp.MustCompile(`(?i)(bearer|auth(orization)?)\s+[a-zA-Z0-9+/=]{20,}`),
+		regexp.MustCompile(`(?i)curl.*(-H|--header).*authorization`),
+		regexp.MustCompile(`(?i)(ssh|scp|rsync).*password`),
+		regexp.MustCompile(`(?i)(postgres|mysql|mongodb|redis):\/\/.*:.*@`),
+		regexp.MustCompile(`(?i)SECRET_KEY\s*=`),
+		regexp.MustCompile(`(?i)DJANGO_(SECRET|DB_PASSWORD)`),
+	}
 
-# Cleanup
-Write-Host ""
-Write-Info "Cleaning up..."
-try {
-    & workshot delete test-context-2 -f 2>&1 | Out-Null
-    Remove-Item "$env:TEMP\workshot.exe" -ErrorAction SilentlyContinue
-} catch {
-    # Ignore cleanup errors
-}
+	for _, pattern := range sensitivePatterns {
+		if pattern.MatchString(line) {
+			return true
+		}
+	}
 
-# Results
-Write-Host ""
-Write-Host "======================================" -ForegroundColor White
-Write-Host "Tests Passed: " -NoNewline
-Write-Host "$TestsPassed" -ForegroundColor Green
-Write-Host "Tests Failed: " -NoNewline
-Write-Host "$TestsFailed" -ForegroundColor Red
-Write-Host "======================================" -ForegroundColor White
-Write-Host ""
-
-if ($TestsFailed -eq 0) {
-    Write-Success "All tests passed!"
-    exit 0
-} else {
-    Write-Error "Some tests failed"
-    exit 1
+	return false
 }
