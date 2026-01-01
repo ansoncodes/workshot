@@ -2,6 +2,10 @@
 
 **Never lose your development context again.**
 
+[![Workshot Preview](https://img.youtube.com/vi/SGsAqqVDe6w/0.jpg)](https://youtu.be/SGsAqqVDe6w)
+
+*Click the above image to watch a preview of Workshot in action.*
+
 Workshot is a lightweight, cross-platform CLI tool that captures and restores your development environment in seconds. Built for developers who context-switch frequently and need a fast, reliable way to resume work exactly where they left off.
 
 ---
